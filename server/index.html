@@ -164,7 +164,7 @@
       </div>
 
     <div class="input-area">
-      <input type="text" id="user-input" placeholder="무엇을 할까?" autocomplete="off" />
+      <input type="text" id="user-input" placeholder="무엇을 할까? (예시: 화산들소에게 인사한다. '안녕?')" autocomplete="off" />
       <button id="send-btn">행동</button>
     </div>
   </div>
@@ -217,7 +217,6 @@
       chatBox.scrollTop = chatBox.scrollHeight;
     }
 
-    // 한 글자씩 출력하며 소리를 내는 마법의 함수 ✨
     async function typeWriterEffect(text) {
       const msgDiv = document.createElement("div");
       msgDiv.classList.add("message", "bison", "typing-cursor");
