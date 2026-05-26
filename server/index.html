@@ -7,11 +7,11 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/neodgm/neodgm-webfont@latest/neodgm/style.css">
   <style>
     :root {
-      --bg-color: #1a100c; /* 어두운 화산암 배경 */
-      --text-color: #f4d3a0; /* 낡은 양피지 글씨색 */
-      --border-color: #d64a23; /* 끓어오르는 용암 테두리 */
-      --bison-color: #e25822; /* 들소 텍스트 색 */
-      --user-color: #a7d8de; /* 플레이어 텍스트 색 */
+      --bg-color: #1a100c;
+      --text-color: #f4d3a0;
+      --border-color: #d64a23;
+      --bison-color: #e25822;
+      --user-color: #a7d8de;
     }
 
     body {
@@ -23,9 +23,48 @@
       align-items: center;
       height: 100vh;
       margin: 0;
+      overflow: hidden; /* 인트로 화면을 위해 스크롤 방지 */
     }
 
-    /* 레트로 게임기 화면 틀 */
+    /* 🎬 인트로 화면 스타일 */
+    #intro-screen {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: #000;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 100;
+      cursor: pointer;
+    }
+    
+    #intro-screen.hidden {
+      display: none;
+    }
+
+    #intro-image {
+      max-width: 80%;
+      max-height: 70%;
+      border: 4px solid var(--border-color);
+      image-rendering: pixelated; /* 도트 이미지 깨짐 방지 */
+    }
+
+    .blink-text {
+      margin-top: 20px;
+      font-size: 1.2rem;
+      color: #fff;
+      animation: blink 1s infinite;
+    }
+
+    @keyframes blink {
+      50% { opacity: 0; }
+    }
+
+    /* 🎮 메인 게임 화면 스타일 */
     .game-container {
       width: 100%;
       max-width: 600px;
@@ -39,7 +78,6 @@
       box-sizing: border-box;
     }
 
-    /* 상단 상태바 */
     .status-bar {
       border-bottom: 2px dashed var(--border-color);
       padding-bottom: 10px;
@@ -50,7 +88,6 @@
       text-shadow: 2px 2px #000;
     }
 
-    /* 대화창 영역 */
     .chat-box {
       flex-grow: 1;
       overflow-y: auto;
@@ -63,7 +100,6 @@
       gap: 15px;
     }
 
-    /* 스크롤바 숨기기 (깔끔한 픽셀 아트를 위해) */
     .chat-box::-webkit-scrollbar { width: 8px; }
     .chat-box::-webkit-scrollbar-thumb { background: var(--border-color); }
 
@@ -71,8 +107,13 @@
     .message.system { color: #888; text-align: center; }
     .message.user { color: var(--user-color); }
     .message.bison { color: var(--bison-color); text-shadow: 1px 1px #000; }
+    
+    /* 타이핑 커서 애니메이션 */
+    .typing-cursor::after {
+      content: ' █';
+      animation: blink 1s infinite;
+    }
 
-    /* 하단 입력 영역 */
     .input-area {
       display: flex;
       gap: 10px;
@@ -100,18 +141,18 @@
       box-shadow: 4px 4px 0px #000;
     }
 
-    button:active {
-      transform: translate(4px, 4px);
-      box-shadow: none;
-    }
-
-    button:disabled, input:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
+    button:active { transform: translate(4px, 4px); box-shadow: none; }
+    button:disabled, input:disabled { opacity: 0.5; cursor: not-allowed; }
   </style>
 </head>
 <body>
+
+  <audio id="type-sound" src="sound.wav" preload="auto"></audio>
+
+  <div id="intro-screen">
+    <img id="intro-image" src="scene1.png" alt="Intro Scene">
+    <div class="blink-text">화면을 클릭하세요 ▼</div>
+  </div>
 
   <div class="game-container">
     <div class="status-bar">
@@ -120,8 +161,7 @@
     </div>
 
     <div class="chat-box" id="chat-box">
-      <div class="message system">야생의 화산들소가 길을 막아섰다!<br>10턴 안에 들소를 설득해 지나가야 한다.</div>
-    </div>
+      </div>
 
     <div class="input-area">
       <input type="text" id="user-input" placeholder="무엇을 할까?" autocomplete="off" />
@@ -131,48 +171,104 @@
 
   <script>
     const API_URL = "https://talktobison.vercel.app/api/chat";
-    let conversationHistory = []; // 대화 기록 저장
+    let conversationHistory = [];
     let isGameOver = false;
 
     const chatBox = document.getElementById("chat-box");
     const userInput = document.getElementById("user-input");
     const sendBtn = document.getElementById("send-btn");
     const turnDisplay = document.getElementById("turn-display");
+    const typeSound = document.getElementById("type-sound");
 
-    // 화면에 메시지를 추가하는 함수
-    function appendMessage(role, text) {
+    // ==========================================
+    // 🎬 인트로 컷신 로직
+    // ==========================================
+    // 여기에 준비하신 이미지 파일명들을 순서대로 넣어주세요.
+    const introImages = ["scene1.png", "scene2.png"]; 
+    let currentImageIndex = 0;
+    const introScreen = document.getElementById("intro-screen");
+    const introImgElement = document.getElementById("intro-image");
+
+    introScreen.addEventListener("click", () => {
+      currentImageIndex++;
+      if (currentImageIndex < introImages.length) {
+        introImgElement.src = introImages[currentImageIndex];
+      } else {
+        // 이미지 끝! 메인 게임으로 전환
+        introScreen.classList.add("hidden");
+        appendMessage("system", "야생의 화산들소가 길을 막아섰다!<br>10턴 안에 들소를 설득해 지나가야 한다.");
+        userInput.focus();
+      }
+    });
+
+    // ==========================================
+    // 💬 메시지 출력 및 타이핑 효과 로직
+    // ==========================================
+    function appendMessage(role, text, id = null) {
       const msgDiv = document.createElement("div");
       msgDiv.classList.add("message", role);
+      if (id) msgDiv.id = id;
       
-      // 줄바꿈 처리
       const formattedText = text.replace(/\n/g, "<br>");
-      
       if (role === 'user') msgDiv.innerHTML = `> 플레이어: ${formattedText}`;
-      else if (role === 'bison') msgDiv.innerHTML = `🦬 들소: ${formattedText}`;
       else msgDiv.innerHTML = formattedText;
 
       chatBox.appendChild(msgDiv);
-      chatBox.scrollTop = chatBox.scrollHeight; // 스크롤 맨 아래로
+      chatBox.scrollTop = chatBox.scrollHeight;
     }
 
-    // 서버로 메시지 전송
+    // 한 글자씩 출력하며 소리를 내는 마법의 함수 ✨
+    async function typeWriterEffect(text) {
+      const msgDiv = document.createElement("div");
+      msgDiv.classList.add("message", "bison", "typing-cursor");
+      msgDiv.innerHTML = "🦬 들소: "; // 말머리 고정
+      chatBox.appendChild(msgDiv);
+
+      for (let i = 0; i < text.length; i++) {
+        // 줄바꿈 처리
+        if (text[i] === '\n') {
+          msgDiv.innerHTML += "<br>";
+        } else {
+          msgDiv.innerHTML += text[i];
+          
+          // 글자가 타이핑 될 때마다 소리 재생 (에러 방지용 catch 포함)
+          // 띄어쓰기에서는 소리를 안 내도록 예외처리
+          if (text[i] !== ' ') {
+            typeSound.currentTime = 0; // 재생 위치를 처음으로 돌려 연타 효과
+            typeSound.play().catch(() => {}); // 브라우저 자동재생 정책 에러 무시
+          }
+        }
+        chatBox.scrollTop = chatBox.scrollHeight;
+        
+        // 50ms 대기 (숫자가 클수록 타이핑이 느려집니다)
+        await new Promise(resolve => setTimeout(resolve, 50)); 
+      }
+      
+      msgDiv.classList.remove("typing-cursor"); // 커서 깜빡임 제거
+    }
+
+    // ==========================================
+    // 📡 서버 통신 및 게임 진행 로직
+    // ==========================================
     async function sendMessage() {
       if (isGameOver) return;
       
       const text = userInput.value.trim();
       if (!text) return;
 
-      // 1. 유저 메시지 화면에 표시
       appendMessage("user", text);
       userInput.value = "";
       
-      // UI 잠금 (로딩 중)
+      // UI 잠금 (입력 방지)
       userInput.disabled = true;
       sendBtn.disabled = true;
       sendBtn.innerText = "대기중...";
 
+      // 🤔 생각 중(로딩) 메시지 띄우기
+      const thinkingId = "thinking-msg";
+      appendMessage("system", "화산들소가 콧김을 뿜으며 당신의 말을 곱씹고 있습니다...", thinkingId);
+
       try {
-        // 2. 백엔드 API 호출
         const response = await fetch(API_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -184,21 +280,23 @@
 
         const data = await response.json();
 
-        // 3. 서버에서 갱신된 대화 기록 저장
+        // 통신이 끝났으니 '생각 중...' 메시지 삭제
+        const thinkingElement = document.getElementById(thinkingId);
+        if (thinkingElement) thinkingElement.remove();
+
         conversationHistory = data.updatedHistory;
 
-        // 4. 들소의 반응 화면에 표시 (시스템 태그 필터링)
         const cleanReply = data.bisonReply
             .replace("[CLEAR]", "")
             .replace("[GAMEOVER]", "")
             .trim();
-        appendMessage("bison", cleanReply);
 
-        // 남은 턴 수 업데이트
+        // ⌨️ 타이핑 효과 호출! (끝날 때까지 await로 대기)
+        await typeWriterEffect(cleanReply);
+
         const remainingTurns = 10 - data.currentTurn;
         turnDisplay.innerText = `남은 턴: ${Math.max(0, remainingTurns)}`;
 
-        // 5. 게임 종료 판별
         if (data.gameStatus === "CLEAR") {
           appendMessage("system", "🎉 [GAME CLEAR] 화산들소가 만족한 듯 길을 비켜주었다!");
           endGame();
@@ -211,7 +309,9 @@
         }
 
       } catch (error) {
-        appendMessage("system", "통신 오류가 발생했습니다. 들소가 잠시 멈췄습니다.");
+        const thinkingElement = document.getElementById(thinkingId);
+        if (thinkingElement) thinkingElement.remove();
+        appendMessage("system", "통신 오류가 발생했습니다. 들소가 멍을 때립니다.");
         console.error(error);
       } finally {
         if (!isGameOver) {
@@ -230,7 +330,6 @@
       sendBtn.innerText = "종료됨";
     }
 
-    // 버튼 클릭 및 엔터 키 이벤트
     sendBtn.addEventListener("click", sendMessage);
     userInput.addEventListener("keypress", (e) => {
       if (e.key === "Enter") sendMessage();
